@@ -6,6 +6,7 @@ import torch.optim as optim
 import torch.optim.lr_scheduler as lr_scheduler
 import torch.utils.data
 from torch.utils.tensorboard import SummaryWriter
+import torch_xla.core.xla_model as xm
 
 import test  # import test.py to get mAP after each epoch
 from models.yolo import Model
@@ -366,7 +367,7 @@ if __name__ == '__main__':
     parser.add_argument('--cache-images', action='store_true', help='cache images for faster training')
     parser.add_argument('--weights', type=str, default='', help='initial weights path')
     parser.add_argument('--name', default='', help='renames results.txt to results_name.txt if supplied')
-    parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
+    parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu or xla')
     parser.add_argument('--adam', action='store_true', help='use adam optimizer')
     parser.add_argument('--multi-scale', action='store_true', help='vary img-size +/- 50%')
     parser.add_argument('--single-cls', action='store_true', help='train as single-class dataset')
@@ -376,7 +377,14 @@ if __name__ == '__main__':
     opt.data = check_file(opt.data)  # check file
     print(opt)
     opt.img_size.extend([opt.img_size[-1]] * (2 - len(opt.img_size)))  # extend to 2 sizes (train, test)
-    device = torch_utils.select_device(opt.device, apex=mixed_precision, batch_size=opt.batch_size)
+
+    if opt.device == 'xla':
+        print("Using Google TPU xla devices")
+        device = xm.xla_device()
+        print(device.type)
+    else:
+        device = torch_utils.select_device(opt.device, apex=mixed_precision, batch_size=opt.batch_size)
+
     if device.type == 'cpu':
         mixed_precision = False
 
