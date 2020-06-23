@@ -6,6 +6,7 @@ import torch.optim as optim
 import torch.optim.lr_scheduler as lr_scheduler
 import torch.utils.data
 from torch.utils.tensorboard import SummaryWriter
+import torch_xla.core.xla_model as xm
 
 import test  # import test.py to get mAP after each epoch
 from models.yolo import Model
@@ -44,13 +45,8 @@ hyp = {'lr0': 0.01,  # initial learning rate (SGD=1E-2, Adam=1E-3)
        'degrees': 0.0,  # image rotation (+/- deg)
        'translate': 0.0,  # image translation (+/- fraction)
        'scale': 0.5,  # image scale (+/- gain)
-       'shear': 0.0,  # image shear (+/- deg)
-       'pixelate': 0.0,
-       'blur': 0.0,
-       'dilate': 0.0,
-       'erode': 0.0
-       }
-#print(hyp)
+       'shear': 0.0}  # image shear (+/- deg)
+print(hyp)
 
 # Overwrite hyp with hyp*.txt (optional)
 f = glob.glob('hyp*.txt')
@@ -84,7 +80,6 @@ def train(hyp):
     # Create model
     model = Model(opt.cfg).to(device)
     assert model.md['nc'] == nc, '%s nc=%g classes but %s nc=%g classes' % (opt.data, nc, opt.cfg, model.md['nc'])
-    model.names = data_dict['names']
 
     # Image sizes
     gs = int(max(model.stride))  # grid size (max stride)
@@ -160,15 +155,36 @@ def train(hyp):
         model = torch.nn.parallel.DistributedDataParallel(model)
         # pip install torch==1.4.0+cu100 torchvision==0.5.0+cu100 -f https://download.pytorch.org/whl/torch_stable.html
 
-    # Trainloader
-    dataloader, dataset = create_dataloader(train_path, imgsz, batch_size, gs, opt,
-                                            hyp=hyp, augment=True, cache=opt.cache_images, rect=opt.rect)
+    # Dataset
+    dataset = LoadImagesAndLabels(train_path, imgsz, batch_size,
+                                  augment=True,
+                                  hyp=hyp,  # augmentation hyperparameters
+                                  rect=opt.rect,  # rectangular training
+                                  cache_images=opt.cache_images,
+                                  single_cls=opt.single_cls)
     mlc = np.concatenate(dataset.labels, 0)[:, 0].max()  # max label class
     assert mlc < nc, 'Label class %g exceeds nc=%g in %s. Correct your labels or your model.' % (mlc, nc, opt.cfg)
 
+    # Dataloader
+    batch_size = min(batch_size, len(dataset))
+    nw = min([os.cpu_count(), batch_size if batch_size > 1 else 0, 8])  # number of workers
+    dataloader = torch.utils.data.DataLoader(dataset,
+                                             batch_size=batch_size,
+                                             num_workers=nw,
+                                             shuffle=not opt.rect,  # Shuffle=True unless rectangular training is used
+                                             pin_memory=True,
+                                             collate_fn=dataset.collate_fn)
+
     # Testloader
-    testloader = create_dataloader(test_path, imgsz_test, batch_size, gs, opt,
-                                            hyp=hyp, augment=False, cache=opt.cache_images, rect=True)[0]
+    testloader = torch.utils.data.DataLoader(LoadImagesAndLabels(test_path, imgsz_test, batch_size,
+                                                                 hyp=hyp,
+                                                                 rect=True,
+                                                                 cache_images=opt.cache_images,
+                                                                 single_cls=opt.single_cls),
+                                             batch_size=batch_size,
+                                             num_workers=nw,
+                                             pin_memory=True,
+                                             collate_fn=dataset.collate_fn)
 
     # Model parameters
     hyp['cls'] *= nc / 80.  # scale coco-tuned hyp['cls'] to current dataset
@@ -176,6 +192,7 @@ def train(hyp):
     model.hyp = hyp  # attach hyperparameters to model
     model.gr = 1.0  # giou loss ratio (obj_loss = 1.0 or giou)
     model.class_weights = labels_to_class_weights(dataset.labels, nc).to(device)  # attach class weights
+    model.names = data_dict['names']
 
     # Class frequency
     labels = np.concatenate(dataset.labels, 0)
@@ -200,7 +217,7 @@ def train(hyp):
     maps = np.zeros(nc)  # mAP per class
     results = (0, 0, 0, 0, 0, 0, 0)  # 'P', 'R', 'mAP', 'F1', 'val GIoU', 'val Objectness', 'val Classification'
     print('Image sizes %g train, %g test' % (imgsz, imgsz_test))
-    print('Using %g dataloader workers' % dataloader.num_workers)
+    print('Using %g dataloader workers' % nw)
     print('Starting training for %g epochs...' % epochs)
     # torch.autograd.set_detect_anomaly(True)
     for epoch in range(start_epoch, epochs):  # epoch ------------------------------------------------------------------
@@ -211,10 +228,6 @@ def train(hyp):
             w = model.class_weights.cpu().numpy() * (1 - maps) ** 2  # class weights
             image_weights = labels_to_image_weights(dataset.labels, nc=nc, class_weights=w)
             dataset.indices = random.choices(range(dataset.n), weights=image_weights, k=dataset.n)  # rand weighted idx
-
-        # Update mosaic border
-        # b = int(random.uniform(0.25 * imgsz, 0.75 * imgsz + gs) // gs * gs)
-        # dataset.mosaic_border = [b - imgsz, -b]  # height, width borders
 
         mloss = torch.zeros(4, device=device)  # mean losses
         print(('\n' + '%10s' * 8) % ('Epoch', 'gpu_mem', 'GIoU', 'obj', 'cls', 'total', 'targets', 'img_size'))
@@ -273,10 +286,10 @@ def train(hyp):
 
             # Plot
             if ni < 3:
-                f = 'train_batch%g.jpg' % ni  # filename
-                result = plot_images(images=imgs, targets=targets, paths=paths, fname=f)
-                if tb_writer and result is not None:
-                    tb_writer.add_image(f, result, dataformats='HWC', global_step=epoch)
+                f = 'train_batch%g.jpg' % i  # filename
+                res = plot_images(images=imgs, targets=targets, paths=paths, fname=f)
+                if tb_writer:
+                    tb_writer.add_image(f, res, dataformats='HWC', global_step=epoch)
                     # tb_writer.add_graph(model, imgs)  # add model to tensorboard
 
             # end batch ------------------------------------------------------------------------------------------------
@@ -382,7 +395,12 @@ if __name__ == '__main__':
     print(opt)
     opt.img_size.extend([opt.img_size[-1]] * (2 - len(opt.img_size)))  # extend to 2 sizes (train, test)
 
-    device = torch_utils.select_device(opt.device, apex=mixed_precision, batch_size=opt.batch_size)
+    if opt.device == 'xla':
+        print("Using Google TPU xla devices")
+        device = xm.xla_device()
+        print(device.type)
+    else:
+        device = torch_utils.select_device(opt.device, apex=mixed_precision, batch_size=opt.batch_size)
 
     if device.type == 'cpu':
         mixed_precision = False
