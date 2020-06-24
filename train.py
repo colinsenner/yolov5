@@ -47,7 +47,7 @@ hyp = {'lr0': 0.01,  # initial learning rate (SGD=1E-2, Adam=1E-3)
        'shear': 0.0,  # image shear (+/- deg)
        'pixelate': 1.0,
        'blur': 1.0}
-print(hyp)
+#print(hyp)
 
 # Overwrite hyp with hyp*.txt (optional)
 f = glob.glob('hyp*.txt')
