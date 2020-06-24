@@ -1,5 +1,8 @@
+import cv2
+import random
+
 def stream_augment(img, pixelate=1, blur=1):
-    print(f"Applying stream artifacts...")
+    #print(f"Applying stream artifacts...")
 
     augments = [
         lambda img: blur_image(img, strength=blur),
@@ -64,3 +67,6 @@ def blur_image(img, strength=1):
     # print(fr_w, fr_h)
 
     cv2.boxFilter(img, ddepth=-1, ksize=(fr_w,fr_h), dst=img)
+
+def remap(value, low1, high1, low2, high2):
+       return low2 + (value - low1) * (high2 - low2) / (high1 - low1)
