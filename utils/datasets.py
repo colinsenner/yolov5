@@ -6,7 +6,7 @@ import shutil
 import time
 from pathlib import Path
 from threading import Thread
-from stream import stream_augment
+from .stream import stream_augment
 
 import cv2
 import numpy as np
