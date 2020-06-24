@@ -6,6 +6,7 @@ import shutil
 import time
 from pathlib import Path
 from threading import Thread
+from stream import stream_augment
 
 import cv2
 import numpy as np
@@ -465,6 +466,12 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                 labels[:, 2] = ratio[1] * h * (x[:, 2] - x[:, 4] / 2) + pad[1]  # pad height
                 labels[:, 3] = ratio[0] * w * (x[:, 1] + x[:, 3] / 2) + pad[0]
                 labels[:, 4] = ratio[1] * h * (x[:, 2] + x[:, 4] / 2) + pad[1]
+
+        # Custom augmentation to emulate stream quality
+        if self.augment:
+            stream_augment(img,
+                           pixelate=hyp['pixelate'],
+                           blur=hyp['blur'])
 
         if self.augment:
             # Augment imagespace
