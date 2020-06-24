@@ -218,6 +218,7 @@ def train(hyp):
     maps = np.zeros(nc)  # mAP per class
     results = (0, 0, 0, 0, 0, 0, 0)  # 'P', 'R', 'mAP', 'F1', 'val GIoU', 'val Objectness', 'val Classification'
     print('Image sizes %g train, %g test' % (imgsz, imgsz_test))
+    print('Batch size %g' % (batch_size))
     print('Using %g dataloader workers' % nw)
     print('Starting training for %g epochs...' % epochs)
     # torch.autograd.set_detect_anomaly(True)
