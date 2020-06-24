@@ -1,37 +1,9 @@
-import cv2
-import random
-import numpy as np
-
-def dilate_image(img, strength=1):
-    if strength == 0:
-        return
-
-    # Random kernel size
-    w = random.randrange(1,3)
-    h = random.randrange(1,3)
-
-    kernel = np.ones((w,h), np.uint8)
-    cv2.dilate(img, kernel, iterations=1, dst=img)
-
-def erode_image(img, strength=1):
-    if strength == 0:
-        return
-
-    # Random kernel size
-    w = random.randrange(1,3)
-    h = random.randrange(1,3)
-
-    kernel = np.ones((w,h), np.uint8)
-    cv2.erode(img, kernel, iterations=1, dst=img)
-
-def stream_augment(img, pixelate=1, blur=1, dilate=1, erode=1):
-    #print(f"Applying stream artifacts...")
+def stream_augment(img, pixelate=1, blur=1):
+    print(f"Applying stream artifacts...")
 
     augments = [
         lambda img: blur_image(img, strength=blur),
         lambda img: pixelate_image(img, strength=pixelate),
-        lambda img: dilate_image(img, strength=dilate),
-        lambda img: erode_image(img, strength=erode),
     ]
     random.shuffle(augments)
 
@@ -49,8 +21,6 @@ def pixelate_image(img, strength=1):
     Returns:
         [type]: [description]
     """
-    if strength == 0:
-        return
 
     height, width = img.shape[:2]
 
@@ -81,8 +51,6 @@ def blur_image(img, strength=1):
         image (ndarray): Input image to be blurred in-place.
         strength (int, optional): 0 means no change, 1 means max blur. Defaults to 1.
     """
-    if strength == 0:
-        return
 
     max_kernel_size = 7
 
@@ -96,6 +64,3 @@ def blur_image(img, strength=1):
     # print(fr_w, fr_h)
 
     cv2.boxFilter(img, ddepth=-1, ksize=(fr_w,fr_h), dst=img)
-
-def remap(value, low1, high1, low2, high2):
-       return low2 + (value - low1) * (high2 - low2) / (high1 - low1)
