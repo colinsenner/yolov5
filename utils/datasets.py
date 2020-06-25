@@ -515,7 +515,9 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         if self.augment:
             stream_augment(img,
                            pixelate=hyp['pixelate'],
-                           blur=hyp['blur'])
+                           blur=hyp['blur'],
+                           erode=hyp['erode'],
+                           dilate=hyp['dilate'])
 
         if self.augment:
             # Augment imagespace

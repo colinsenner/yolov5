@@ -1,12 +1,37 @@
 import cv2
 import random
+import numpy as np
 
-def stream_augment(img, pixelate=1, blur=1):
+def dilate_image(img, strength=1):
+    if strength < 1:
+        return
+
+    # Random kernel size
+    w = random.randrange(1,3)
+    h = random.randrange(1,3)
+
+    kernel = np.ones((w,h), np.uint8)
+    cv2.dilate(img, kernel, iterations=1, dst=img)
+
+def erode_image(img, strength=1):
+    if strength < 1:
+        return
+
+    # Random kernel size
+    w = random.randrange(1,3)
+    h = random.randrange(1,3)
+
+    kernel = np.ones((w,h), np.uint8)
+    cv2.erode(img, kernel, iterations=1, dst=img)
+
+def stream_augment(img, pixelate=1, blur=1, dilate=1, erode=1):
     #print(f"Applying stream artifacts...")
 
     augments = [
         lambda img: blur_image(img, strength=blur),
         lambda img: pixelate_image(img, strength=pixelate),
+        lambda img: dilate_image(img, strength=dilate),
+        lambda img: erode_image(img, strength=erode),
     ]
     random.shuffle(augments)
 
