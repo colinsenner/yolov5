@@ -3,7 +3,7 @@ import random
 import numpy as np
 
 def dilate_image(img, strength=1):
-    if strength < 1:
+    if strength == 0:
         return
 
     # Random kernel size
@@ -14,7 +14,7 @@ def dilate_image(img, strength=1):
     cv2.dilate(img, kernel, iterations=1, dst=img)
 
 def erode_image(img, strength=1):
-    if strength < 1:
+    if strength == 0:
         return
 
     # Random kernel size
@@ -49,6 +49,8 @@ def pixelate_image(img, strength=1):
     Returns:
         [type]: [description]
     """
+    if strength == 0:
+        return
 
     height, width = img.shape[:2]
 
@@ -79,6 +81,8 @@ def blur_image(img, strength=1):
         image (ndarray): Input image to be blurred in-place.
         strength (int, optional): 0 means no change, 1 means max blur. Defaults to 1.
     """
+    if strength == 0:
+        return
 
     max_kernel_size = 7
 
