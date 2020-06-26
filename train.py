@@ -45,10 +45,10 @@ hyp = {'lr0': 0.01,  # initial learning rate (SGD=1E-2, Adam=1E-3)
        'translate': 0.0,  # image translation (+/- fraction)
        'scale': 0.5,  # image scale (+/- gain)
        'shear': 0.0,  # image shear (+/- deg)
-       'pixelate': 1.0,
-       'blur': 1.0,
-       'dilate': 1.0,
-       'erode': 1.0
+       'pixelate': 0.0,
+       'blur': 0.0,
+       'dilate': 0.0,
+       'erode': 0.0
        }
 #print(hyp)
 
