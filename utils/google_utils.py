@@ -1,7 +1,7 @@
 # This file contains google utils: https://cloud.google.com/storage/docs/reference/libraries
 # pip install --upgrade google-cloud-storage
 # from google.cloud import storage
-
+import re
 import os
 import time
 from pathlib import Path
@@ -46,15 +46,41 @@ def gdrive_download(id='1HaXkef9z6y5l4vUnCYgdmEAj61c6bfWO', name='coco.zip'):
     os.remove(name) if os.path.exists(name) else None  # remove existing
     os.remove('cookie') if os.path.exists('cookie') else None
 
+    confirm_code = None
+
     # Attempt file download
-    os.system("curl -c ./cookie -s -L \"https://drive.google.com/uc?export=download&id=%s\" > /dev/null" % id)
+    if os.name == "nt":
+        # Windows
+        os.system("curl -c ./cookie -s -L \"https://drive.google.com/uc?export=download&id=%s\" > response" % id)
+        # We need the confirm code if it exists
+        response = Path('response').read_text('utf-8')
+
+        if response:
+            # Search for confirm=#### code
+            match = re.search(r'confirm=([0-9a-zA-Z]+)', response)
+            if match:
+                confirm_code = match.group(1)
+                print(f"confirm code: {confirm_code}")
+
+    elif os.name == "posix":
+        # Linux
+        os.system("curl -c ./cookie -s -L \"https://drive.google.com/uc?export=download&id=%s\" > /dev/null" % id)
+
     if os.path.exists('cookie'):  # large file
-        s = "curl -Lb ./cookie \"https://drive.google.com/uc?export=download&confirm=`awk '/download/ {print $NF}' ./cookie`&id=%s\" -o %s" % (
-            id, name)
+        if os.name == "nt":
+            # Windows
+            if confirm_code:
+                s = "curl -Lb ./cookie \"https://drive.google.com/uc?export=download&confirm=%s&id=%s\" -o %s" % (confirm_code, id, name)
+            else:
+                s = "curl -Lb ./cookie \"https://drive.google.com/uc?export=download&id=%s\" -o %s" % (id, name)
+        elif os.name == "posix":
+            # Linux
+            s = "curl -Lb ./cookie \"https://drive.google.com/uc?export=download&confirm=`awk '/download/ {print $NF}' ./cookie`&id=%s\" -o %s" % (id, name)
     else:  # small file
         s = "curl -s -L -o %s 'https://drive.google.com/uc?export=download&id=%s'" % (name, id)
     r = os.system(s)  # execute, capture return values
     os.remove('cookie') if os.path.exists('cookie') else None
+    os.remove('response') if os.path.exists('response') else None
 
     # Error check
     if r != 0:
