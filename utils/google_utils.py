@@ -1,7 +1,7 @@
 # This file contains google utils: https://cloud.google.com/storage/docs/reference/libraries
 # pip install --upgrade google-cloud-storage
 # from google.cloud import storage
-
+import re
 import os
 import time
 from pathlib import Path
@@ -9,10 +9,10 @@ from pathlib import Path
 
 def attempt_download(weights):
     # Attempt to download pretrained weights if not found locally
-    weights = weights.strip().replace("'", '')
+    weights = weights.strip()
     msg = weights + ' missing, try downloading from https://drive.google.com/drive/folders/1Drs_Aiu7xx6S-ix95f9kNsA6ueKRpN2J'
 
-    r = 1  # return
+    r = 1
     if len(weights) > 0 and not os.path.isfile(weights):
         d = {'yolov3-spp.pt': '1mM67oNw4fZoIOL1c8M3hHmj66d8e-ni_',  # yolov3-spp.yaml
              'yolov5s.pt': '1R5T6rIyy3lLwgFXNms8whc-387H0tMQO',  # yolov5s.yaml
@@ -27,7 +27,7 @@ def attempt_download(weights):
 
         if not (r == 0 and os.path.exists(weights) and os.path.getsize(weights) > 1E6):  # weights exist and > 1MB
             os.remove(weights) if os.path.exists(weights) else None  # remove partial downloads
-            s = "curl -L -o %s 'storage.googleapis.com/ultralytics/yolov5/ckpt/%s'" % (weights, file)
+            s = "curl -L -o %s 'https://storage.googleapis.com/ultralytics/yolov5/ckpt/%s'" % (weights, file)
             r = os.system(s)  # execute, capture return values
 
             # Error check
@@ -36,7 +36,8 @@ def attempt_download(weights):
                 raise Exception(msg)
 
 
-def gdrive_download(id='1n_oKgR81BJtqk75b00eAjdv03qVCQn2f', name='coco128.zip'):
+def gdrive_download(id='1HaXkef9z6y5l4vUnCYgdmEAj61c6bfWO', name='coco.zip'):
+    # https://gist.github.com/tanaikech/f0f2d122e05bf5f971611258c22c110f
     # Downloads a file from Google Drive, accepting presented query
     # from utils.google_utils import *; gdrive_download()
     t = time.time()
@@ -45,15 +46,41 @@ def gdrive_download(id='1n_oKgR81BJtqk75b00eAjdv03qVCQn2f', name='coco128.zip'):
     os.remove(name) if os.path.exists(name) else None  # remove existing
     os.remove('cookie') if os.path.exists('cookie') else None
 
+    confirm_code = None
+
     # Attempt file download
-    os.system("curl -c ./cookie -s -L \"drive.google.com/uc?export=download&id=%s\" > /dev/null" % id)
+    if os.name == "nt":
+        # Windows
+        os.system("curl -c ./cookie -s -L \"https://drive.google.com/uc?export=download&id=%s\" > response" % id)
+        # We need the confirm code if it exists
+        response = Path('response').read_text('utf-8')
+
+        if response:
+            # Search for confirm=#### code
+            match = re.search(r'confirm=([0-9a-zA-Z]+)', response)
+            if match:
+                confirm_code = match.group(1)
+                print(f"confirm code: {confirm_code}")
+
+    elif os.name == "posix":
+        # Linux
+        os.system("curl -c ./cookie -s -L \"https://drive.google.com/uc?export=download&id=%s\" > /dev/null" % id)
+
     if os.path.exists('cookie'):  # large file
-        s = "curl -Lb ./cookie \"drive.google.com/uc?export=download&confirm=`awk '/download/ {print $NF}' ./cookie`&id=%s\" -o %s" % (
-            id, name)
+        if os.name == "nt":
+            # Windows
+            if confirm_code:
+                s = "curl -Lb ./cookie \"https://drive.google.com/uc?export=download&confirm=%s&id=%s\" -o %s" % (confirm_code, id, name)
+            else:
+                s = "curl -Lb ./cookie \"https://drive.google.com/uc?export=download&id=%s\" -o %s" % (id, name)
+        elif os.name == "posix":
+            # Linux
+            s = "curl -Lb ./cookie \"https://drive.google.com/uc?export=download&confirm=`awk '/download/ {print $NF}' ./cookie`&id=%s\" -o %s" % (id, name)
     else:  # small file
-        s = 'curl -s -L -o %s "drive.google.com/uc?export=download&id=%s"' % (name, id)
+        s = "curl -s -L -o %s 'https://drive.google.com/uc?export=download&id=%s'" % (name, id)
     r = os.system(s)  # execute, capture return values
     os.remove('cookie') if os.path.exists('cookie') else None
+    os.remove('response') if os.path.exists('response') else None
 
     # Error check
     if r != 0:
@@ -69,7 +96,6 @@ def gdrive_download(id='1n_oKgR81BJtqk75b00eAjdv03qVCQn2f', name='coco128.zip'):
 
     print('Done (%.1fs)' % (time.time() - t))
     return r
-
 
 # def upload_blob(bucket_name, source_file_name, destination_blob_name):
 #     # Uploads a file to a bucket
